@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="com.phenix.xglobal.ctx.android" >
+
+    <uses-sdk android:minSdkVersion="21" />
+    <!-- 自动初始化:在 Application.onCreate 之前执行 -->
+    <application>
+        <provider
+            android:name="com.phenix.xglobal.ctx.android.CtxAutoInitProvider"
+            android:authorities="${applicationId}.xglobalctx"
+            android:exported="false"
+            android:initOrder="100" />
+    </application>
+
+</manifest>
