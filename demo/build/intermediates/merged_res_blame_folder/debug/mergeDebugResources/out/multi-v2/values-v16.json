@@ -1,0 +1,20 @@
+{
+    "logs": [
+        {
+            "outputFile": "com.phenix.xglobal.ctx.demo-mergeDebugResources-48:/values-v16/values-v16.xml",
+            "map": [
+                {
+                    "source": "C:\\Users\\46186\\.gradle\\caches\\9.5.0\\transforms\\af5cb1a94d3a365b9dc7c969d062f06f\\transformed\\appcompat-1.7.0\\res\\values-v16\\values-v16.xml",
+                    "from": {
+                        "startLines": "2",
+                        "startColumns": "4",
+                        "startOffsets": "55",
+                        "endLines": "5",
+                        "endColumns": "12",
+                        "endOffsets": "223"
+                    }
+                }
+            ]
+        }
+    ]
+}

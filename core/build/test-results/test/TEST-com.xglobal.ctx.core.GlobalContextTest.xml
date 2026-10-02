@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.xglobal.ctx.core.GlobalContextTest" tests="7" skipped="0" failures="0" errors="0" timestamp="2026-10-02T14:46:11.081Z" hostname="PHENIX" time="0.151">
+  <properties/>
+  <testcase name="terminate detaches all capabilities()" classname="com.xglobal.ctx.core.GlobalContextTest" time="0.048"/>
+  <testcase name="capability lifecycle callbacks fire in order()" classname="com.xglobal.ctx.core.GlobalContextTest" time="0.003"/>
+  <testcase name="store keys with same id share state()" classname="com.xglobal.ctx.core.GlobalContextTest" time="0.001"/>
+  <testcase name="store get returns default and set updates value()" classname="com.xglobal.ctx.core.GlobalContextTest" time="0.0"/>
+  <testcase name="flow emits updates and dedupes same values()" classname="com.xglobal.ctx.core.GlobalContextTest" time="0.091"/>
+  <testcase name="register same id twice is idempotent()" classname="com.xglobal.ctx.core.GlobalContextTest" time="0.001"/>
+  <testcase name="bus is non-sticky and delivers post-subscription events()" classname="com.xglobal.ctx.core.GlobalContextTest" time="0.004"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

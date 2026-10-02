@@ -1,0 +1,28 @@
+-- Merging decision tree log ---
+manifest
+ADDED from C:\Users\46186\.workspace\AndroidStudioProjects\XGlobalCtx\android\src\main\AndroidManifest.xml:2:1-12:12
+INJECTED from C:\Users\46186\.workspace\AndroidStudioProjects\XGlobalCtx\android\src\main\AndroidManifest.xml:2:1-12:12
+	package
+		INJECTED from C:\Users\46186\.workspace\AndroidStudioProjects\XGlobalCtx\android\src\main\AndroidManifest.xml
+	xmlns:android
+		ADDED from C:\Users\46186\.workspace\AndroidStudioProjects\XGlobalCtx\android\src\main\AndroidManifest.xml:2:11-69
+application
+ADDED from C:\Users\46186\.workspace\AndroidStudioProjects\XGlobalCtx\android\src\main\AndroidManifest.xml:5:5-11:19
+provider#com.phenix.xglobal.ctx.android.CtxAutoInitProvider
+ADDED from C:\Users\46186\.workspace\AndroidStudioProjects\XGlobalCtx\android\src\main\AndroidManifest.xml:6:9-10:39
+	android:authorities
+		ADDED from C:\Users\46186\.workspace\AndroidStudioProjects\XGlobalCtx\android\src\main\AndroidManifest.xml:8:13-62
+	android:exported
+		ADDED from C:\Users\46186\.workspace\AndroidStudioProjects\XGlobalCtx\android\src\main\AndroidManifest.xml:9:13-37
+	android:initOrder
+		ADDED from C:\Users\46186\.workspace\AndroidStudioProjects\XGlobalCtx\android\src\main\AndroidManifest.xml:10:13-36
+	android:name
+		ADDED from C:\Users\46186\.workspace\AndroidStudioProjects\XGlobalCtx\android\src\main\AndroidManifest.xml:7:13-78
+uses-sdk
+INJECTED from C:\Users\46186\.workspace\AndroidStudioProjects\XGlobalCtx\android\src\main\AndroidManifest.xml reason: use-sdk injection requested
+INJECTED from C:\Users\46186\.workspace\AndroidStudioProjects\XGlobalCtx\android\src\main\AndroidManifest.xml
+INJECTED from C:\Users\46186\.workspace\AndroidStudioProjects\XGlobalCtx\android\src\main\AndroidManifest.xml
+	android:targetSdkVersion
+		INJECTED from C:\Users\46186\.workspace\AndroidStudioProjects\XGlobalCtx\android\src\main\AndroidManifest.xml
+	android:minSdkVersion
+		INJECTED from C:\Users\46186\.workspace\AndroidStudioProjects\XGlobalCtx\android\src\main\AndroidManifest.xml
