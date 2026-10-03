@@ -8,7 +8,7 @@ import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.phenix.xglobal.ctx.android.AppGlobalContext
-import com.phenix.xglobal.ctx.core.GlobalContext
+import com.phenix.xglobal.ctx.core.IGlobalContext
 import com.phenix.xglobal.ctx.core.StateKey
 
 /**
@@ -18,7 +18,7 @@ import com.phenix.xglobal.ctx.core.StateKey
 /** 把状态键的值收集为 [State]，内部使用 collectAsStateWithLifecycle。 */
 @Composable
 public fun <T> StateKey<T>.collectAsState(
-    context: GlobalContext = AppGlobalContext.require(),
+    context: IGlobalContext = AppGlobalContext.require(),
 ): State<T> = context.store.flow(this).collectAsStateWithLifecycle()
 
 /**
@@ -27,7 +27,7 @@ public fun <T> StateKey<T>.collectAsState(
  */
 @Composable
 public fun CollectEvents(
-    context: GlobalContext = AppGlobalContext.require(),
+    context: IGlobalContext = AppGlobalContext.require(),
     block: (Any) -> Unit,
 ) {
     LaunchedEffect(context) {

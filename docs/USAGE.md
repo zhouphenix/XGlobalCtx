@@ -13,7 +13,7 @@ XGlobalCtx 是一套面向 **SDK 场景** 的全局上下文库：管理和挂�
 
 | 模块 | 内容 | 是否必选 |
 |---|---|---|
-| `core` | 纯 Kotlin 内核：StateStore / EventBus / Capability / GlobalContext 接口 | 必选（随 android 传递） |
+| `core` | 纯 Kotlin 内核：IStateStore / IEventBus / Capability / IGlobalContext 接口 | 必选（随 android 传递） |
 | `android` | Android 实现：初始化、系统回调、内置 Capability（UiMode / Language / Foreground） | 必选 |
 | `view` | View 体系扩展：`observe` 系列扩展函数 | 用 View 时添加 |
 | `compose` | Compose 扩展：`collectAsState` 系列 | 用 Compose 时添加 |
@@ -124,26 +124,26 @@ fun EventWatcher() {
 
 ## 6. 核心 API 一览
 
-### GlobalContext（门面）
+### IGlobalContext（门面）
 
 ```kotlin
-interface GlobalContext {
-    val store: StateStore            // 状态仓库
-    val bus: EventBus                // 事件总线（非粘性）
+interface IGlobalContext {
+    val store: IStateStore            // 状态仓库
+    val bus: IEventBus                // 事件总线（非粘性）
     val isForeground: Boolean        // 前后台快捷属性
 
-    fun <T : GlobalCapability> getCapability(id: String): T
-    fun register(capability: GlobalCapability)     // 挂载扩展
-    fun unregister(capability: GlobalCapability)   // 卸载扩展
+    fun <T : IGlobalCapability> getCapability(id: String): T
+    fun register(capability: IGlobalCapability)     // 挂载扩展（立即激活，触发 onAttach）
+    fun unregister(capability: IGlobalCapability)   // 卸载扩展
 }
 ```
 
-### StateStore（状态仓库）
+### IStateStore（状态仓库）
 
 ```kotlin
 class StateKey<T>(val id: String, val default: T)   // 类型令牌，编译期类型安全
 
-interface StateStore {
+interface IStateStore {
     fun <T> get(key: StateKey<T>): T              // 同步读，任何线程可调
     fun <T> flow(key: StateKey<T>): StateFlow<T>  // 响应式订阅
     fun <T> set(key: StateKey<T>, value: T)       // SDK/能力内部使用
@@ -156,10 +156,10 @@ interface StateStore {
 - 相同值重复 `set` 不会触发下游发射（`StateFlow` 天然去重）
 - `set` 主要面向 SDK 内部与 Capability 实现；三方建议通过自身 Capability 封装写入口，避免直接改全局状态
 
-### EventBus（事件总线）
+### IEventBus（事件总线）
 
 ```kotlin
-interface EventBus {
+interface IEventBus {
     val events: SharedFlow<Any>       // 非粘性：只收到订阅之后的事件
     suspend fun post(event: Any)      // 挂起发射
     fun tryPost(event: Any): Boolean  // 非挂起发射，缓冲满时返回 false
@@ -168,15 +168,15 @@ interface EventBus {
 
 要点：
 
-- **非粘性**：当前值不通过事件获取，一律走 `StateStore.get`
+- **非粘性**：当前值不通过事件获取，一律走 `IStateStore.get`
 - 事件类型为 `Any`，完全开放，不限制业务；订阅侧用 `is` 分发
 
-### GlobalCapability（扩展挂载）
+### IGlobalCapability（扩展挂载）
 
 ```kotlin
-interface GlobalCapability {
+interface IGlobalCapability {
     val id: String
-    fun onAttach(context: GlobalContext) {}                   // 挂载时回调
+    fun onAttach(context: IGlobalContext) {}                   // 挂载时回调
     fun onForeground() {}                                     // App 回到前台
     fun onBackground() {}                                     // App 退到后台
     fun onConfigurationChanged(config: Configuration) {}      // 系统配置变化
@@ -192,7 +192,36 @@ interface GlobalCapability {
 | LanguageCapability | `xglobal.language` | `ctx.language` / `ctx.store.flow(LanguageKey)` | 只读系统语言 |
 | ForegroundCapability | `xglobal.foreground` | `ctx.isForeground` | 驱动前后台回调 |
 
-内置能力与三方扩展走**同一套** `GlobalCapability` 机制，由库自举挂载。
+内置能力与三方扩展走**同一套** `IGlobalCapability` 机制，由库自举挂载。
+
+### 设备/系统状态类内置能力（`DeviceCapabilities.kt`）
+
+以下能力默认**不自动挂载**：需要时构造实例并 `register` 即刻启用（注册系统监听/读取初始值），`unregister` 或进程退出时释放。
+
+| 名称 | id | 状态键 | 说明 |
+|---|---|---|---|
+| NetworkCapability | `xglobal.network` | `TypeKey` / `BarsKey` | 网络类型 + 信号格数 0..4（蜂窝 TelephonyManager 监听，WiFi 走 NetworkCapabilities 信号推送） |
+| ScreenCapability | `xglobal.screen` | `ScreenCapability.StateKeyToken` | 亮灭 / 锁屏 / 解锁，广播驱动 |
+| BatteryCapability | `xglobal.battery` | `LevelKey` / `ChargingKey` / `PowerSaveKey` | 电量、充电、省电模式，广播驱动 |
+| StorageCapability | `xglobal.storage` | `StorageCapability.AvailableBytesKey` | 内部存储可用空间，30s 轮询 |
+| TimeZoneCapability | `xglobal.timezone` | `TimeZoneCapability.IdKey` | 时区 id，配置变化驱动 |
+| FontScaleCapability | `xglobal.fontscale` | `FontScaleCapability.ScaleKey` | 系统字体缩放，配置变化驱动 |
+
+用法示例：
+
+```kotlin
+val ctx = AppGlobalContext.require()
+val network = ctx.getCapability<NetworkCapability>("xglobal.network")
+
+network.current                  // NetworkType.WIFI / CELLULAR / NONE
+lifecycleScope.launch {
+    network.flow.collect { type -> /* 网络切换 */ }
+}
+
+val battery = ctx.getCapability<BatteryCapability>("xglobal.battery")
+battery.level       // 0..100，-1 表示未知
+battery.isPowerSave // 是否省电模式
+```
 
 ---
 
@@ -201,15 +230,15 @@ interface GlobalCapability {
 适合放置"App 全生命周期唯一"的功能：登录态、用户信息、日志开关、性能采样开关等。
 
 ```kotlin
-class SessionCapability : GlobalCapability {
+class SessionCapability : IGlobalCapability {
     override val id = "myapp.session"
 
-    private lateinit var ctx: GlobalContext
+    private lateinit var ctx: IGlobalContext
 
     // 自定义状态键
     private val loggedInKey = StateKey("myapp.session.logged_in", false)
 
-    override fun onAttach(context: GlobalContext) {
+    override fun onAttach(context: IGlobalContext) {
         ctx = context
         // 可在此读取一次初始值 / 注册监听
     }
@@ -270,12 +299,12 @@ ctx.bus.events
 
 - 所有系统回调（配置变化、前后台）在库内部协程作用域（`SupervisorJob + Dispatchers.Main.immediate`）中处理后再写入 Store，读侧无锁
 - 内核作用域为进程级，不随任何 Activity 销毁
-- `StateStore.get` 线程安全；事件发射推荐在主线程或协程中调用
+- `IStateStore.get` 线程安全；事件发射推荐在主线程或协程中调用
 - UI 层订阅（view / compose 模块）自动跟随生命周期，无需手动取消
 
 ## 9. 行为边界（第一版）
 
 - **仅主进程**：多进程场景下非主进程不应访问本库
 - **UiMode / 语言只读**：跟随系统，不持久化、不提供覆盖能力；进程启动时读取一次，之后由 `onConfigurationChanged` 驱动刷新
-- **事件非粘性**：不保存历史事件；需要"当前值"一律用 StateStore
+- **事件非粘性**：不保存历史事件；需要"当前值"一律用 IStateStore
 - **未初始化访问**：抛出明确异常，请确保访问发生在 `init` 或自动初始化之后

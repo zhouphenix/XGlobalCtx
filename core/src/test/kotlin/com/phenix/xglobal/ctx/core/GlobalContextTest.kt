@@ -11,14 +11,14 @@ import kotlin.test.assertTrue
 
 class GlobalContextTest {
 
-    private class TestCapability(override val id: String) : GlobalCapability {
+    private class TestCapability(override val id: String) : IGlobalCapability {
         var attached = false
         var detached = false
         var foregrounded = 0
         var backgrounded = 0
         var configChanged = 0
 
-        override fun onAttach(context: GlobalContext) { attached = true }
+        override fun onAttach(context: IGlobalContext) { attached = true }
         override fun onDetach() { detached = true }
         override fun onForeground() { foregrounded++ }
         override fun onBackground() { backgrounded++ }

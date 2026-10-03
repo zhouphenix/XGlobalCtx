@@ -1,6 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
+    <!-- NetworkCapability 需要;普通权限,安装即授予 -->
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+
     <!-- 自动初始化:在 Application.onCreate 之前执行 -->
     <application>
         <provider

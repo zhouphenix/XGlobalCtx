@@ -3,8 +3,8 @@ package com.phenix.xglobal.ctx.android
 import android.content.Context
 import android.content.res.Configuration
 import android.os.Build
-import com.phenix.xglobal.ctx.core.GlobalCapability
-import com.phenix.xglobal.ctx.core.GlobalContext
+import com.phenix.xglobal.ctx.core.IGlobalCapability
+import com.phenix.xglobal.ctx.core.IGlobalContext
 import com.phenix.xglobal.ctx.core.StateKey
 import kotlinx.coroutines.flow.StateFlow
 import java.util.Locale
@@ -23,9 +23,9 @@ public object LanguageKey : StateKey<Locale>("xglobal.language", Locale.getDefau
  * 进程启动读取一次；配置变化由 AppLifecycleCallbacks → 内核 → [onConfigurationChanged] 驱动刷新。
  */
 public class UiModeCapability(
-    private val context: GlobalContext,
+    private val context: IGlobalContext,
     private val appContext: Context,
-) : GlobalCapability {
+) : IGlobalCapability {
 
     override val id: String = "xglobal.uimode"
 
@@ -35,7 +35,8 @@ public class UiModeCapability(
     /** UiMode 响应式流。 */
     public val flow: StateFlow<UiMode> get() = context.store.flow(UiModeKey)
 
-    init {
+    /** 懒加载：首次 getCapability 访问时才读取初始值。 */
+    override fun onAttach(context: IGlobalContext) {
         context.store.set(UiModeKey, readFromConfig())
     }
 
@@ -58,9 +59,9 @@ public class UiModeCapability(
  * 进程启动读取一次，配置变化时跟随系统刷新；不做语言覆盖。
  */
 public class LanguageCapability(
-    private val context: GlobalContext,
+    private val context: IGlobalContext,
     @Suppress("unused") private val appContext: Context,
-) : GlobalCapability {
+) : IGlobalCapability {
 
     override val id: String = "xglobal.language"
 
@@ -70,7 +71,8 @@ public class LanguageCapability(
     /** 语言响应式流。 */
     public val flow: StateFlow<Locale> get() = context.store.flow(LanguageKey)
 
-    init {
+    /** 懒加载：首次 getCapability 访问时才读取初始值。 */
+    override fun onAttach(context: IGlobalContext) {
         context.store.set(LanguageKey, readLocale())
     }
 
@@ -93,8 +95,8 @@ public class LanguageCapability(
  * 本能力把内核状态以能力形式暴露。
  */
 public class ForegroundCapability(
-    private val context: GlobalContext,
-) : GlobalCapability {
+    private val context: IGlobalContext,
+) : IGlobalCapability {
 
     override val id: String = "xglobal.foreground"
 

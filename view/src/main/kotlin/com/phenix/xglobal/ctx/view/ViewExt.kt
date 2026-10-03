@@ -5,8 +5,8 @@ import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import com.phenix.xglobal.ctx.android.AppGlobalContext
-import com.phenix.xglobal.ctx.core.EventBus
-import com.phenix.xglobal.ctx.core.GlobalContext
+import com.phenix.xglobal.ctx.core.IEventBus
+import com.phenix.xglobal.ctx.core.IGlobalContext
 import com.phenix.xglobal.ctx.core.StateKey
 import kotlinx.coroutines.launch
 
@@ -18,7 +18,7 @@ import kotlinx.coroutines.launch
 /** 观察状态键的值变化，STARTED 时收集、STOPPED 时停止。 */
 public fun <T> StateKey<T>.observe(
     owner: LifecycleOwner,
-    context: GlobalContext = AppGlobalContext.require(),
+    context: IGlobalContext = AppGlobalContext.require(),
     block: (T) -> Unit,
 ) {
     owner.lifecycleScope.launch {
@@ -29,9 +29,9 @@ public fun <T> StateKey<T>.observe(
 }
 
 /** 观察全局事件（非粘性：仅收到订阅之后的事件）。 */
-public fun EventBus.observeEvents(
+public fun IEventBus.observeEvents(
     owner: LifecycleOwner,
-    context: GlobalContext = AppGlobalContext.require(),
+    context: IGlobalContext = AppGlobalContext.require(),
     block: (Any) -> Unit,
 ) {
     owner.lifecycleScope.launch {

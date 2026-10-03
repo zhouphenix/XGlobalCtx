@@ -4,7 +4,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 
 /**
- * 类型安全的状态键。每个键携带默认值，保证 [StateStore.get] 永远返回非空值。
+ * 类型安全的状态键。每个键携带默认值，保证 [IStateStore.get] 永远返回非空值。
  *
  * 推荐以 object 单例方式声明：
  * ```
@@ -24,7 +24,7 @@ public open class StateKey<T>(public val id: String, public val default: T) {
  * - [flow] 返回 [StateFlow]，相同值重复写入不会触发下游发射
  * - [set] 面向 SDK 内部与 Capability 实现，建议三方可通过自身 Capability 封装写入口
  */
-public interface StateStore {
+public interface IStateStore {
     /** 同步读取当前值，任何时候可调（含未挂载 UI 的场景）。 */
     public fun <T> get(key: StateKey<T>): T
 
@@ -40,7 +40,7 @@ public interface StateStore {
  *
  * 线程安全：基于 kotlinx.coroutines 的线程安全实现；写入与读取无自定义锁。
  */
-internal class StateStoreImpl : StateStore {
+internal class StateStoreImpl : IStateStore {
 
     private val flows = java.util.concurrent.ConcurrentHashMap<String, MutableStateFlow<Any?>>()
 

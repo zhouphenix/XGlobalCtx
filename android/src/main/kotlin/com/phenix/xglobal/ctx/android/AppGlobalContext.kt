@@ -2,7 +2,7 @@ package com.phenix.xglobal.ctx.android
 
 import android.app.Application
 import android.content.Context
-import com.phenix.xglobal.ctx.core.GlobalContext
+import com.phenix.xglobal.ctx.core.IGlobalContext
 import com.phenix.xglobal.ctx.core.GlobalContextImpl
 
 /**
@@ -23,13 +23,13 @@ public object AppGlobalContext {
      * 初始化（幂等）。建议传 Application context；
      * 传 Activity 等亦可，内部会取 applicationContext。
      */
-    public fun init(context: Context): GlobalContext {
+    public fun init(context: Context): IGlobalContext {
         impl?.let { return it }
         val app = context.applicationContext as? Application
             ?: error("AppGlobalContext.init must be called with an Application context")
         val ctx = GlobalContextImpl()
         synchronized(this) {
-            if (impl != null) return impl as GlobalContext
+            if (impl != null) return impl as IGlobalContext
             impl = ctx
         }
         attachBuiltInCapabilities(ctx, app)
@@ -37,7 +37,7 @@ public object AppGlobalContext {
     }
 
     /** 获取全局上下文；未初始化时抛 [IllegalStateException]。 */
-    public fun require(): GlobalContext =
+    public fun require(): IGlobalContext =
         impl ?: throw IllegalStateException(
             "AppGlobalContext not initialized. " +
                 "Ensure the library's auto-init provider is not stripped, " +
@@ -60,7 +60,7 @@ public object AppGlobalContext {
         impl = null
     }
 
-    /** 内置能力自举：与三方扩展走同一套 GlobalCapability 机制。 */
+    /** 内置能力自举：与三方扩展走同一套 IGlobalCapability 机制。 */
     private fun attachBuiltInCapabilities(ctx: GlobalContextImpl, app: Application) {
         val lifecycle = AppLifecycleCallbacks(app, ctx)
         app.registerActivityLifecycleCallbacks(lifecycle)

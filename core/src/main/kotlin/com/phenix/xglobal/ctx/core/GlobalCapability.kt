@@ -7,12 +7,12 @@ package com.phenix.xglobal.ctx.core
  * 回调均在主线程触发；core 层不感知 Android 类型，
  * 系统配置等由 android 适配层转换后转发。
  */
-public interface GlobalCapability {
+public interface IGlobalCapability {
     /** 能力唯一标识，建议形如 "xglobal.uimode"、"myapp.session"。 */
     public val id: String
 
     /** 挂载时回调，可在此读取初始值、注册监听。 */
-    public fun onAttach(context: GlobalContext) {}
+    public fun onAttach(context: IGlobalContext) {}
 
     /** App 回到前台。 */
     public fun onForeground() {}
