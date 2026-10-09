@@ -10,6 +10,7 @@
 
         <activity
             android:name=".MainActivity"
+            android:configChanges="uiMode|locale|layoutDirection"
             android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />

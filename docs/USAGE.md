@@ -192,7 +192,9 @@ interface IGlobalCapability {
 | LanguageCapability | `xglobal.language` | `ctx.language` / `ctx.store.flow(LanguageKey)` | 只读系统语言 |
 | ForegroundCapability | `xglobal.foreground` | `ctx.isForeground` | 驱动前后台回调 |
 
-内置能力与三方扩展走**同一套** `IGlobalCapability` 机制，由库自举挂载。
+内置能力与三方扩展走**同一套** `IGlobalCapability` 机制。**默认均不启用**：需要时构造实例并 `register` 即刻启用（注册系统监听/读取初始值），`unregister` 或进程退出时释放。
+
+`IGlobalContext.isRegistered(id)` 可只查注册状态而不激活能力（适合状态摘要/调试面板）。
 
 ### 设备/系统状态类内置能力（`DeviceCapabilities.kt`）
 
@@ -206,6 +208,8 @@ interface IGlobalCapability {
 | StorageCapability | `xglobal.storage` | `StorageCapability.AvailableBytesKey` | 内部存储可用空间，30s 轮询 |
 | TimeZoneCapability | `xglobal.timezone` | `TimeZoneCapability.IdKey` | 时区 id，配置变化驱动 |
 | FontScaleCapability | `xglobal.fontscale` | `FontScaleCapability.ScaleKey` | 系统字体缩放，配置变化驱动 |
+| SplitScreenCapability | `xglobal.splitscreen` | `InMultiWindowKey` | 分屏/多窗口监测，库统一上报（Activity 生命周期回调） |
+| SystemBarsCapability | `xglobal.systembars` | `VisibleKey` / `StatusBarVisibleKey` / `NavBarVisibleKey` / `StatusFitsKey` / `NavFitsKey` / `IconDarkKey` / `StatusBarColorKey` / `NavBarColorKey` | 状态栏/导航栏独立显隐（`hideStatusBar`/`showStatusBar`/`hideNavBar`/`showNavBar`）与监听（attachHost 注册宿主后生效）、独立背景色+透明度（`setStatusBarBackground`/`setNavBarBackground`）、独立避让（`setStatusFits`/`setNavFits`,自管理 padding,insets 驱动,对 Compose 内容生效）、图标深浅、窗口自定义背景 |
 
 用法示例：
 

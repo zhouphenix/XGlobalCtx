@@ -3,6 +3,7 @@ package com.phenix.xglobal.ctx.android
 import android.app.Activity
 import android.app.Application
 import android.content.res.Configuration
+import android.os.Build
 import android.os.Bundle
 import kotlinx.coroutines.flow.MutableStateFlow
 
@@ -45,7 +46,13 @@ internal class AppLifecycleCallbacks(
     }
 
     override fun onActivityCreated(activity: Activity, savedInstanceState: Bundle?) = Unit
-    override fun onActivityResumed(activity: Activity) = Unit
+    override fun onActivityResumed(activity: Activity) {
+        // 统一上报分屏/多窗口状态（进出分屏时 Activity 必然重新 resume）
+        // 注:ActivityLifecycleCallbacks 无 onActivityMultiWindowModeChanged,故在 resume 时读取
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            AppGlobalContext.multiWindowFlow.value = activity.isInMultiWindowMode
+        }
+    }
     override fun onActivityPaused(activity: Activity) = Unit
     override fun onActivitySaveInstanceState(activity: Activity, outState: Bundle) = Unit
     override fun onActivityDestroyed(activity: Activity) = Unit

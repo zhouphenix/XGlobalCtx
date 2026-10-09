@@ -24,6 +24,9 @@ public interface IGlobalContext {
     /** 按 id 获取已挂载能力，未挂载时抛 [NoSuchElementException]。 */
     public fun <T : IGlobalCapability> getCapability(id: String): T
 
+    /** 该 id 的能力是否已注册（只查表，不激活）。 */
+    public fun isRegistered(id: String): Boolean
+
     /** 挂载能力，重复注册同一 id 无副作用；触发 [IGlobalCapability.onAttach]。 */
     public fun register(capability: IGlobalCapability)
 
@@ -52,6 +55,8 @@ public class GlobalContextImpl : IGlobalContext {
     override fun <T : IGlobalCapability> getCapability(id: String): T =
         registry[id] as? T
             ?: throw NoSuchElementException("Capability not registered: $id")
+
+    override fun isRegistered(id: String): Boolean = registry.containsKey(id)
 
     override fun register(capability: IGlobalCapability) {
         if (registry.containsKey(capability.id)) return

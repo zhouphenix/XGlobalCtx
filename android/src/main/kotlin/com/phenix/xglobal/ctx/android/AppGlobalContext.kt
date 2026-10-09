@@ -4,6 +4,7 @@ import android.app.Application
 import android.content.Context
 import com.phenix.xglobal.ctx.core.IGlobalContext
 import com.phenix.xglobal.ctx.core.GlobalContextImpl
+import kotlinx.coroutines.flow.MutableStateFlow
 
 /**
  * 全局上下文单例门面（Android 侧唯一访问入口）。
@@ -15,6 +16,9 @@ import com.phenix.xglobal.ctx.core.GlobalContextImpl
  * 未初始化时调用 [require] 会抛出 [IllegalStateException]，而不是静默 NPE。
  */
 public object AppGlobalContext {
+
+    /** 分屏/多窗口状态通道：由 AppLifecycleCallbacks 统一上报，SplitScreenCapability 桥接到 Store。 */
+    internal val multiWindowFlow = MutableStateFlow(false)
 
     @Volatile
     private var impl: GlobalContextImpl? = null
@@ -60,13 +64,13 @@ public object AppGlobalContext {
         impl = null
     }
 
-    /** 内置能力自举：与三方扩展走同一套 IGlobalCapability 机制。 */
+    /**
+     * 系统回调接线：Activity 计数驱动前后台、ComponentCallbacks 驱动配置变化。
+     * 这是内核基建,始终启用;具体能力（UiMode/Language/Foreground 等）由使用方按需 register。
+     */
     private fun attachBuiltInCapabilities(ctx: GlobalContextImpl, app: Application) {
         val lifecycle = AppLifecycleCallbacks(app, ctx)
         app.registerActivityLifecycleCallbacks(lifecycle)
         lifecycle.start()
-        ctx.register(UiModeCapability(ctx, app))
-        ctx.register(LanguageCapability(ctx, app))
-        ctx.register(ForegroundCapability(ctx))
     }
 }
