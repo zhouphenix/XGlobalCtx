@@ -209,6 +209,7 @@ interface IGlobalCapability {
 | TimeZoneCapability | `xglobal.timezone` | `TimeZoneCapability.IdKey` | 时区 id，配置变化驱动 |
 | FontScaleCapability | `xglobal.fontscale` | `FontScaleCapability.ScaleKey` | 系统字体缩放，配置变化驱动 |
 | SplitScreenCapability | `xglobal.splitscreen` | `InMultiWindowKey` | 分屏/多窗口监测，库统一上报（Activity 生命周期回调） |
+| PaletteCapability | `xglobal.palette` | `BusyKey` / `DominantKey` / `VibrantKey` 等六色调 / `SwatchesKey` | 图片调色板（androidx.palette）：`extract(bitmap)` 异步提取主色、六种命名色调与全部色板（按像素占比排序），结果经 StateStore 订阅，可用于一键换肤等联动（见 demo） |
 | SystemBarsCapability | `xglobal.systembars` | `VisibleKey` / `StatusBarVisibleKey` / `NavBarVisibleKey` / `StatusFitsKey` / `NavFitsKey` / `IconDarkKey` / `StatusBarColorKey` / `NavBarColorKey` | 状态栏/导航栏独立显隐（`hideStatusBar`/`showStatusBar`/`hideNavBar`/`showNavBar`）与监听（attachHost 注册宿主后生效）、独立背景色+透明度（`setStatusBarBackground`/`setNavBarBackground`）、独立避让（`setStatusFits`/`setNavFits`,自管理 padding,insets 驱动,对 Compose 内容生效）、图标深浅、窗口自定义背景 |
 
 用法示例：

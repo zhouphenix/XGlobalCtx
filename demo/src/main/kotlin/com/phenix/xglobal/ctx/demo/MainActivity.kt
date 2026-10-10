@@ -2,18 +2,28 @@ package com.phenix.xglobal.ctx.demo
 
 import android.app.Activity
 import android.content.Intent
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.graphics.Canvas
+import android.graphics.Paint
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
@@ -42,6 +52,7 @@ import com.phenix.xglobal.ctx.android.ForegroundCapability
 import com.phenix.xglobal.ctx.android.LanguageCapability
 import com.phenix.xglobal.ctx.android.LanguageKey
 import com.phenix.xglobal.ctx.android.NetworkCapability
+import com.phenix.xglobal.ctx.android.PaletteCapability
 import com.phenix.xglobal.ctx.android.ScreenCapability
 import com.phenix.xglobal.ctx.android.SplitScreenCapability
 import com.phenix.xglobal.ctx.android.StorageCapability
@@ -54,6 +65,10 @@ import com.phenix.xglobal.ctx.compose.collectAsState
 import com.phenix.xglobal.ctx.core.IGlobalCapability
 import com.phenix.xglobal.ctx.core.IGlobalContext
 import com.phenix.xglobal.ctx.core.StateKey
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.drop
 import kotlin.math.roundToInt
@@ -136,7 +151,7 @@ private val capabilityIds = listOf(
     "xglobal.uimode", "xglobal.language", "xglobal.foreground",
     "xglobal.network", "xglobal.screen", "xglobal.battery",
     "xglobal.storage", "xglobal.timezone", "xglobal.fontscale",
-    "xglobal.splitscreen", "xglobal.systembars",
+    "xglobal.splitscreen", "xglobal.systembars", "xglobal.palette",
 )
 
 /**
@@ -436,6 +451,181 @@ private fun CapabilityToggles(ctx: IGlobalContext, activity: Activity, onFlash: 
                 onFlash("系统栏: ${if (visible) "显示" else "隐藏"}")
             }
         }
+    }
+
+    // ---- Palette 调色板 / 一键换肤 ----
+    val paletteOn = checked["xglobal.palette"] == true
+    val paletteBusy = if (paletteOn) PaletteCapability.BusyKey.collectAsState(ctx).value else null
+    val swatchList = if (paletteOn) PaletteCapability.SwatchesKey.collectAsState(ctx).value else null
+    ExpandableCapabilityRow(
+        "Palette", paletteOn,
+        swatchList?.let { list ->
+            "Palette: ${list.size} 个色板${if (paletteBusy == true) " · 提取中…" else ""}"
+        },
+        onCheckedChange = { on ->
+            toggle("xglobal.palette", on, create = { PaletteCapability(ctx, activity) })
+        },
+    ) {
+        PaletteControls(ctx, activity, onFlash)
+    }
+}
+
+/** 换肤用:按亮度判断是否深色背景(深底用浅图标,浅底用深图标)。 */
+private fun isDarkColor(color: Int): Boolean {
+    val r = (color shr 16) and 0xFF
+    val g = (color shr 8) and 0xFF
+    val b = color and 0xFF
+    return (0.299 * r + 0.587 * g + 0.114 * b) < 128
+}
+
+/**
+ * Palette 折叠区控制台:示例图/相册图提取 + 命名色调/色板网格一键换肤。
+ * 换肤 = 窗口背景 + 状态栏/导航栏背景(联动已启用的 SystemBars),图标深浅按亮度自动。
+ */
+@Composable
+private fun PaletteControls(ctx: IGlobalContext, activity: Activity, onFlash: (String) -> Unit) {
+    val palette = ctx.getCapability<PaletteCapability>("xglobal.palette")
+    val busy = PaletteCapability.BusyKey.collectAsState(ctx).value
+    val swatches = PaletteCapability.SwatchesKey.collectAsState(ctx).value
+
+    // 当前已应用的换肤色(null=未换肤)与最近提取的图片,驱动展示区配色
+    var appliedSkin by remember { mutableStateOf<Int?>(null) }
+    var lastBitmap by remember { mutableStateOf<Bitmap?>(null) }
+
+    fun applySkin(color: Int, label: String) {
+        if (!ctx.isRegistered("xglobal.systembars")) {
+            onFlash("换肤需先启用 SystemBars")
+            return
+        }
+        val bars = ctx.getCapability<SystemBarsCapability>("xglobal.systembars")
+        bars.setWindowBackground(color)
+        bars.setStatusBarBackground(color, 1f)
+        bars.setNavBarBackground(color, 1f)
+        bars.setIconDark(!isDarkColor(color)) // 浅色背景 → 深色图标
+        appliedSkin = color
+        onFlash("换肤: $label #${"%06X".format(color and 0xFFFFFF)}")
+    }
+
+    // 相册选图提取
+    val pickImage = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        if (uri != null) {
+            val bitmap = activity.contentResolver.openInputStream(uri)?.use {
+                BitmapFactory.decodeStream(it)
+            }
+            if (bitmap != null) {
+                lastBitmap = bitmap
+                palette.extract(bitmap)
+                onFlash("已从所选图片提取色板")
+            } else {
+                onFlash("图片解码失败")
+            }
+        }
+    }
+
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Button(onClick = {
+            // 示例图:程序绘制多色块,免内置资源
+            val colors = listOf(
+                0xFF3F51B5.toInt(), 0xFFE91E63.toInt(), 0xFFFFC107.toInt(),
+                0xFF4CAF50.toInt(), 0xFF9C27B0.toInt(),
+            )
+            val bmp = Bitmap.createBitmap(150, 120, Bitmap.Config.ARGB_8888)
+            val canvas = Canvas(bmp)
+            val paint = Paint()
+            val step = 150 / colors.size
+            colors.forEachIndexed { i, c ->
+                paint.color = c
+                canvas.drawRect((i * step).toFloat(), 0f, ((i + 1) * step).toFloat(), 120f, paint)
+            }
+            lastBitmap = bmp
+            palette.extract(bmp)
+            onFlash("已提取示例图色板")
+        }) { Text("提取示例图") }
+        Button(onClick = { pickImage.launch("image/*") }) { Text("从相册选图") }
+    }
+    if (busy) Text("提取中…", style = MaterialTheme.typography.bodySmall)
+
+    // ---- 图片展示区:背景/内容色随当前换肤色联动 ----
+    lastBitmap?.let { bmp ->
+        val skin = appliedSkin
+        val skinColor = skin?.let { Color(it) } ?: MaterialTheme.colorScheme.surface
+        val onSkin = if (skin != null && isDarkColor(skin)) Color.White else Color(0xFF1B1B1B)
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .clip(MaterialTheme.shapes.medium)
+                .background(skinColor)
+                .padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Text(
+                "当前展示图(区域背景随换肤联动)",
+                style = MaterialTheme.typography.bodySmall,
+                color = onSkin,
+            )
+            Image(
+                bitmap = bmp.asImageBitmap(),
+                contentDescription = "提取来源图片",
+                modifier = Modifier
+                    .fillMaxSize()
+                    .heightIn(max = 160.dp)
+                    .clip(MaterialTheme.shapes.small),
+                contentScale = ContentScale.Crop,
+            )
+        }
+    }
+
+    // 命名色调网格(点击换肤)
+    Text("命名色调(点击换肤)", style = MaterialTheme.typography.bodyMedium)
+    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        SkinCell(ctx, "主色", PaletteCapability.DominantKey, ::applySkin)
+        SkinCell(ctx, "活力", PaletteCapability.VibrantKey, ::applySkin)
+        SkinCell(ctx, "浅活力", PaletteCapability.LightVibrantKey, ::applySkin)
+        SkinCell(ctx, "深活力", PaletteCapability.DarkVibrantKey, ::applySkin)
+    }
+    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        SkinCell(ctx, "柔和", PaletteCapability.MutedKey, ::applySkin)
+        SkinCell(ctx, "浅柔和", PaletteCapability.LightMutedKey, ::applySkin)
+        SkinCell(ctx, "深柔和", PaletteCapability.DarkMutedKey, ::applySkin)
+    }
+
+    // 全部色板(按占比排序,点击换肤)
+    if (swatches.isNotEmpty()) {
+        Text("全部色板(${swatches.size},按占比)", style = MaterialTheme.typography.bodyMedium)
+        swatches.chunked(6).forEach { rowEntries ->
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                rowEntries.forEach { entry ->
+                    Box(
+                        modifier = Modifier
+                            .size(36.dp)
+                            .background(Color(entry.color))
+                            .border(1.dp, MaterialTheme.colorScheme.outline, MaterialTheme.shapes.small)
+                            .clickable { applySkin(entry.color, "色板") },
+                    )
+                }
+            }
+        }
+    }
+}
+
+/** 可点击的色调单元:颜色预览块 + 名称;无颜色(0)时置灰不可点。 */
+@Composable
+private fun SkinCell(
+    ctx: IGlobalContext,
+    label: String,
+    colorKey: StateKey<Int>,
+    onApply: (Int, String) -> Unit,
+) {
+    val color = colorKey.collectAsState(ctx).value
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Box(
+            modifier = Modifier
+                .size(48.dp)
+                .background(if (color == 0) Color.LightGray else Color(color))
+                .border(1.dp, MaterialTheme.colorScheme.outline, MaterialTheme.shapes.small)
+                .clickable(enabled = color != 0) { onApply(color, label) },
+        )
+        Text(label, style = MaterialTheme.typography.bodySmall)
     }
 }
 
