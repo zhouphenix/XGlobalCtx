@@ -209,8 +209,11 @@ interface IGlobalCapability {
 | TimeZoneCapability | `xglobal.timezone` | `TimeZoneCapability.IdKey` | 时区 id，配置变化驱动 |
 | FontScaleCapability | `xglobal.fontscale` | `FontScaleCapability.ScaleKey` | 系统字体缩放，配置变化驱动 |
 | SplitScreenCapability | `xglobal.splitscreen` | `InMultiWindowKey` | 分屏/多窗口监测，库统一上报（Activity 生命周期回调） |
-| PaletteCapability | `xglobal.palette` | `BusyKey` / `DominantKey` / `VibrantKey` 等六色调 / `SwatchesKey` | 图片调色板（androidx.palette）：`extract(bitmap)` 异步提取主色、六种命名色调与全部色板（按像素占比排序），结果经 StateStore 订阅，可用于一键换肤等联动（见 demo） |
-| SystemBarsCapability | `xglobal.systembars` | `VisibleKey` / `StatusBarVisibleKey` / `NavBarVisibleKey` / `StatusFitsKey` / `NavFitsKey` / `IconDarkKey` / `StatusBarColorKey` / `NavBarColorKey` | 状态栏/导航栏独立显隐（`hideStatusBar`/`showStatusBar`/`hideNavBar`/`showNavBar`）与监听（attachHost 注册宿主后生效）、独立背景色+透明度（`setStatusBarBackground`/`setNavBarBackground`）、独立避让（`setStatusFits`/`setNavFits`,自管理 padding,insets 驱动,对 Compose 内容生效）、图标深浅、窗口自定义背景 |
+| PaletteCapability | `xglobal.palette` | `BusyKey` / `DominantKey` / `VibrantKey` 等六色调 / `SwatchesKey` / `GlobalApplyKey` / `GlobalSkinKey` | 图片调色板（androidx.palette）：`extract(bitmap)` 异步提取主色、六种命名色调与全部色板（按像素占比排序），结果经 StateStore 订阅，可用于一键换肤等联动（见 demo）；`setGlobalApply(true)` 开启后换肤色经 `GlobalSkinKey` 广播，所有观察方（其他 Activity 等）同步全局换肤 |
+| ScaleCapability | `xglobal.scale` | `TextScaleKey` / `DimScaleKey` | 响应式尺寸双轨：文本 scale 与 DP scale 独立。View 轨 = attachHost 后覆写 density/scaledDensity/densityDpi（基准捕获防叠加，detachHost 恢复）；Compose 轨 = `ResponsiveDensity { }` 包装 LocalDensity 即时重组。两轨二选一，0.5..3.0 |
+| SystemBarsCapability | `xglobal.systembars` | `VisibleKey` / `StatusBarVisibleKey` / `NavBarVisibleKey` / `StatusFitsKey` / `NavFitsKey` / `IconDarkKey` / `StatusBarColorKey` / `NavBarColorKey` | 状态栏/导航栏独立显隐（`hideStatusBar`/`showStatusBar`/`hideNavBar`/`showNavBar`）与监听（attachHost 注册宿主后生效）、独立背景色+透明度（`setStatusBarBackground`/`setNavBarBackground`）、独立避让（`setStatusFits`/`setNavFits`,自管理 padding,insets 驱动,对 Compose 内容生效）、图标深浅、窗口自定义背景；显隐为用户意图记忆——从其他页面返回/窗口重新聚焦后系统可能重置沉浸式隐藏，宿主 `onResume` 调 `applyVisibleConfig()` 按意图恢复（见 demo） |
+
+> **ScaleCapability 尺寸覆盖范围**：覆写 density 后，所有以 **dp 表达的尺寸**——内边距、外边距、宽高、间距、圆角、图片显示尺寸——均随 `DimScaleKey` 统一缩放；文本 sp 随 `TextScaleKey` 独立缩放（Compose 轨内部对 fontScale 做 dimScale 补偿，文本像素 = 基准 × textScale，与尺寸缩放完全解耦；View 轨走独立的 scaledDensity 天然解耦）。**硬编码 px 不跟随**；遗留 px 值可用 `pixelsToDp()`（转等效 dp，随 dimScale 缩放）或 `scaledPixels()`（转当前缩放下的 px，供自绘/Canvas 等 px API）接入响应式体系。
 
 用法示例：
 

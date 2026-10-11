@@ -89,6 +89,11 @@ public class GlobalContextImpl : IGlobalContext {
         registry.values.forEach { it.onConfigurationChanged() }
     }
 
+    /** 宿主页面回到前台（android 层转发 Activity.onResume）。 */
+    public fun notifyHostResumed(host: Any) {
+        registry.values.forEach { it.onHostResumed(host) }
+    }
+
     public fun terminate() {
         registry.values.forEach { it.onDetach() }
         registry.clear()

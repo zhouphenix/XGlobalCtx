@@ -21,11 +21,44 @@ internal class AppLifecycleCallbacks(
 ) : Application.ActivityLifecycleCallbacks {
 
     private val activityCount = MutableStateFlow(0)
+    private val mainHandler = android.os.Handler(android.os.Looper.getMainLooper())
+
+    /**
+     * 定时复核链:Application 级配置回调可能先于前台 Activity 的配置就地更新执行
+     * (读到的 NIGHT_MASK 为旧值,且 configChanges 场景无后续回调纠正)。
+     * 回调后延时 100/300/1000ms 各复核一次——读前台 Activity 的最新配置覆盖写状态键。
+     * 1s 尾点兜底慢设备;StateKey 写入经 StateFlow 去重,重复写同值不会引起观察方抖动。
+     */
+    private fun scheduleConfigRecheck() {
+        listOf(100L, 300L, 1000L).forEach { delayMs ->
+            mainHandler.postDelayed({
+                val activity = AppGlobalContext.resumedActivity ?: return@postDelayed
+                val config = activity.resources.configuration
+                if (ctx.isRegistered("xglobal.uimode")) {
+                    when (config.uiMode and Configuration.UI_MODE_NIGHT_MASK) {
+                        Configuration.UI_MODE_NIGHT_YES -> ctx.store.set(UiModeKey, UiMode.DARK)
+                        Configuration.UI_MODE_NIGHT_NO -> ctx.store.set(UiModeKey, UiMode.LIGHT)
+                        else -> Unit
+                    }
+                }
+                if (ctx.isRegistered("xglobal.language")) {
+                    val locale = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                        config.locales.get(0)
+                    } else {
+                        @Suppress("DEPRECATION")
+                        config.locale
+                    }
+                    locale?.let { ctx.store.set(LanguageKey, it) }
+                }
+            }, delayMs)
+        }
+    }
 
     fun start() {
         app.registerComponentCallbacks(object : android.content.ComponentCallbacks {
             override fun onConfigurationChanged(newConfig: Configuration) {
                 AppGlobalContext.onConfigurationChanged()
+                scheduleConfigRecheck()
             }
 
             @Deprecated("Deprecated in Java")
@@ -40,6 +73,9 @@ internal class AppLifecycleCallbacks(
     }
 
     override fun onActivityStopped(activity: Activity) {
+        if (AppGlobalContext.resumedActivity === activity) {
+            AppGlobalContext.resumedActivity = null
+        }
         val prev = activityCount.value
         activityCount.value = (prev - 1).coerceAtLeast(0)
         if (prev == 1 && activityCount.value == 0) ctx.notifyBackground()
@@ -47,10 +83,36 @@ internal class AppLifecycleCallbacks(
 
     override fun onActivityCreated(activity: Activity, savedInstanceState: Bundle?) = Unit
     override fun onActivityResumed(activity: Activity) {
+        AppGlobalContext.resumedActivity = activity
+        // 分发宿主恢复事件:显隐意图等需要随宿主可见性重应用的能力自行处理(库内闭环)
+        AppGlobalContext.onHostResumed(activity)
         // 统一上报分屏/多窗口状态（进出分屏时 Activity 必然重新 resume）
         // 注:ActivityLifecycleCallbacks 无 onActivityMultiWindowModeChanged,故在 resume 时读取
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
             AppGlobalContext.multiWindowFlow.value = activity.isInMultiWindowMode
+        }
+        // 配置兜底刷新:Application 级回调与 appContext.resources 在部分时序下
+        // (setDefaultNightMode 后 Activity 重建等)拿到的是旧配置,且此后无回调纠正。
+        // resume 时直接读 Activity 自身的最新配置刷新状态键(仅能力已注册时写,避免覆盖默认值)
+        ctx.notifyConfigurationChanged()
+        val config = activity.resources.configuration
+        if (ctx.isRegistered("xglobal.uimode")) {
+            when (config.uiMode and Configuration.UI_MODE_NIGHT_MASK) {
+                Configuration.UI_MODE_NIGHT_YES ->
+                    ctx.store.set(UiModeKey, UiMode.DARK)
+                Configuration.UI_MODE_NIGHT_NO ->
+                    ctx.store.set(UiModeKey, UiMode.LIGHT)
+                else -> Unit
+            }
+        }
+        if (ctx.isRegistered("xglobal.language")) {
+            val locale = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                config.locales.get(0)
+            } else {
+                @Suppress("DEPRECATION")
+                config.locale
+            }
+            locale?.let { ctx.store.set(LanguageKey, it) }
         }
     }
     override fun onActivityPaused(activity: Activity) = Unit

@@ -1,5 +1,6 @@
 package com.phenix.xglobal.ctx.android
 
+import android.app.Activity
 import android.app.Application
 import android.content.Context
 import com.phenix.xglobal.ctx.core.IGlobalContext
@@ -51,11 +52,23 @@ public object AppGlobalContext {
     /** 是否已初始化。 */
     public fun isInitialized(): Boolean = impl != null
 
+    /**
+     * 当前前台(已 resume)Activity,由生命周期回调维护。
+     * 其 resources 配置总是最新(configChanges 或重建后均如此),
+     * UiMode/Language 等读取方用它兜底,规避 appContext 配置在部分时序下滞后的问题。
+     */
+    internal var resumedActivity: android.app.Activity? = null
+
     internal fun requireImpl(): GlobalContextImpl = require() as GlobalContextImpl
 
     /** 平台层转发系统配置变化（供生命周期回调使用）。 */
     internal fun onConfigurationChanged() {
         impl?.notifyConfigurationChanged()
+    }
+
+    /** 平台层转发宿主 Activity 恢复（供生命周期回调使用）。 */
+    internal fun onHostResumed(activity: Activity) {
+        impl?.notifyHostResumed(activity)
     }
 
     /** 平台层转发进程退出。 */

@@ -41,6 +41,12 @@ public class PaletteCapability(
     public object DarkMutedKey : StateKey<Int>("xglobal.palette.dark_muted", 0)
     public object SwatchesKey : StateKey<List<SwatchEntry>>("xglobal.palette.swatches", emptyList())
 
+    /** 全局换肤开关:开启后换肤色写入 [GlobalSkinKey],所有观察方(含其他 Activity)同步。 */
+    public object GlobalApplyKey : StateKey<Boolean>("xglobal.palette.global_apply", false)
+
+    /** 当前全局换肤色(0 = 未应用);观察方按需读取并着色。 */
+    public object GlobalSkinKey : StateKey<Int>("xglobal.palette.global_skin", 0)
+
     public val busy: Boolean get() = context.store.get(BusyKey)
     public val dominant: Int get() = context.store.get(DominantKey)
     public val vibrant: Int get() = context.store.get(VibrantKey)
@@ -52,6 +58,17 @@ public class PaletteCapability(
     public val swatches: List<SwatchEntry> get() = context.store.get(SwatchesKey)
     public val busyFlow: StateFlow<Boolean> get() = context.store.flow(BusyKey)
     public val swatchesFlow: StateFlow<List<SwatchEntry>> get() = context.store.flow(SwatchesKey)
+    public val globalApplyFlow: StateFlow<Boolean> get() = context.store.flow(GlobalApplyKey)
+    public val globalSkinFlow: StateFlow<Int> get() = context.store.flow(GlobalSkinKey)
+
+    /**
+     * 切换"应用到全局 App UI":开启后后续换肤(以及已有的换肤色,由调用方补写)
+     * 经 [GlobalSkinKey] 广播给所有观察方;关闭时清零全局肤色。
+     */
+    public fun setGlobalApply(enabled: Boolean) {
+        context.store.set(GlobalApplyKey, enabled)
+        if (!enabled) context.store.set(GlobalSkinKey, 0)
+    }
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private var job: Job? = null

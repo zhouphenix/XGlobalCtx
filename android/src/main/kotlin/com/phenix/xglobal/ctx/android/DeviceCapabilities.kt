@@ -608,6 +608,7 @@ public class SystemBarsCapability(
         val activity = host ?: return
         armInsetsGuard()
         context.store.set(StatusBarVisibleKey, false)
+        desiredStatusVisible = false
         @Suppress("DEPRECATION")
         val decor = activity.window.decorView
         decor.systemUiVisibility = decor.systemUiVisibility or
@@ -627,6 +628,7 @@ public class SystemBarsCapability(
         val activity = host ?: return
         armInsetsGuard()
         context.store.set(StatusBarVisibleKey, true)
+        desiredStatusVisible = true
         @Suppress("DEPRECATION")
         val decor = activity.window.decorView
         decor.systemUiVisibility = decor.systemUiVisibility and
@@ -645,6 +647,7 @@ public class SystemBarsCapability(
         val activity = host ?: return
         armInsetsGuard()
         context.store.set(NavBarVisibleKey, false)
+        desiredNavVisible = false
         @Suppress("DEPRECATION")
         val decor = activity.window.decorView
         decor.systemUiVisibility = decor.systemUiVisibility or
@@ -664,6 +667,7 @@ public class SystemBarsCapability(
         val activity = host ?: return
         armInsetsGuard()
         context.store.set(NavBarVisibleKey, true)
+        desiredNavVisible = true
         @Suppress("DEPRECATION")
         val decor = activity.window.decorView
         decor.systemUiVisibility = decor.systemUiVisibility and
@@ -683,6 +687,32 @@ public class SystemBarsCapability(
             VisibleKey,
             context.store.get(StatusBarVisibleKey) || context.store.get(NavBarVisibleKey),
         )
+    }
+
+    // 用户显隐意图:null=未主动设置。沉浸式导航栏在窗口重新聚焦时会被系统重新显示,
+    // insets 回写会把 VisibleKey 翻回 true——重进宿主时按意图(而非 insets)重应用即可纠正
+    private var desiredStatusVisible: Boolean? = null
+    private var desiredNavVisible: Boolean? = null
+
+    /**
+     * 按记录的显隐意图重新应用到宿主窗口。
+     * 宿主从其他 Activity 返回 / 窗口重新聚焦后,系统可能重置沉浸式隐藏,
+     * 在 onResume 调用本方法恢复用户勾选状态。
+     */
+    public fun applyVisibleConfig() {
+        val status = desiredStatusVisible ?: return
+        val nav = desiredNavVisible
+        if (status) showStatusBar() else hideStatusBar()
+        when (nav) {
+            true -> showNavBar()
+            false -> hideNavBar()
+            null -> Unit
+        }
+    }
+
+    /** 库内闭环:宿主 Activity resume 时自动按显隐意图重应用(无需使用方在页面里调用)。 */
+    override fun onHostResumed(host: Any) {
+        if (host === this.host) applyVisibleConfig()
     }
 
     /**
@@ -820,12 +850,20 @@ public class SystemBarsCapability(
         navBarInsetHeight = insets.systemWindowInsetBottom
         // 保护窗内跳过可见性回写:刚由 API 写入的显隐状态不被滞后 insets 覆盖
         if (!insetsGuardActive()) {
-            // per-bar 可见性:top inset 对应状态栏,bottom inset 对应导航栏
-            context.store.set(StatusBarVisibleKey, insets.systemWindowInsetTop > 0)
-            context.store.set(NavBarVisibleKey, insets.systemWindowInsetBottom > 0)
+            // per-bar 可见性:top inset 对应状态栏,bottom inset 对应导航栏。
+            // 回写前先对照用户显隐意图:意图为隐藏时,系统重新聚焦等场景
+            // 重现的栏不应把状态键翻回(由 applyVisibleConfig 负责纠正实际显示)
+            val statusActual = insets.systemWindowInsetTop > 0
+            val navActual = insets.systemWindowInsetBottom > 0
+            if (desiredStatusVisible == null || desiredStatusVisible == statusActual) {
+                context.store.set(StatusBarVisibleKey, statusActual)
+            }
+            if (desiredNavVisible == null || desiredNavVisible == navActual) {
+                context.store.set(NavBarVisibleKey, navActual)
+            }
             context.store.set(
                 VisibleKey,
-                insets.systemWindowInsetTop > 0 || insets.systemWindowInsetBottom > 0,
+                context.store.get(StatusBarVisibleKey) || context.store.get(NavBarVisibleKey),
             )
         }
         applyFitsPadding()

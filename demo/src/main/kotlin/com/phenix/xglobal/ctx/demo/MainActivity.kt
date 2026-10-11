@@ -20,12 +20,14 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.HorizontalDivider
@@ -35,6 +37,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.collectAsState
@@ -45,6 +48,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import com.phenix.xglobal.ctx.android.BatteryCapability
 import com.phenix.xglobal.ctx.android.FontScaleCapability
@@ -54,6 +60,7 @@ import com.phenix.xglobal.ctx.android.LanguageKey
 import com.phenix.xglobal.ctx.android.NetworkCapability
 import com.phenix.xglobal.ctx.android.PaletteCapability
 import com.phenix.xglobal.ctx.android.ScreenCapability
+import com.phenix.xglobal.ctx.android.ScaleCapability
 import com.phenix.xglobal.ctx.android.SplitScreenCapability
 import com.phenix.xglobal.ctx.android.StorageCapability
 import com.phenix.xglobal.ctx.android.SystemBarsCapability
@@ -62,6 +69,7 @@ import com.phenix.xglobal.ctx.android.UiMode
 import com.phenix.xglobal.ctx.android.UiModeCapability
 import com.phenix.xglobal.ctx.android.UiModeKey
 import com.phenix.xglobal.ctx.compose.collectAsState
+import com.phenix.xglobal.ctx.compose.ResponsiveDensity
 import com.phenix.xglobal.ctx.core.IGlobalCapability
 import com.phenix.xglobal.ctx.core.IGlobalContext
 import com.phenix.xglobal.ctx.core.StateKey
@@ -87,7 +95,9 @@ class MainActivity : ComponentActivity() {
         val ctx = AppGlobalContextAccess.require()
         setContent {
             DemoThemeFromGlobal(ctx) {
-                Surface(modifier = Modifier.fillMaxSize()) {
+                // Compose 轨:响应式尺寸(textScale/dimScale 即时重组,详见 ScaleCapability)
+                ResponsiveDensity(ctx) {
+                    Surface(modifier = Modifier.fillMaxSize()) {
                     val flash = remember { mutableStateOf<String?>(null) }
                     // flash 反馈条自动消失
                     LaunchedEffect(flash.value) {
@@ -133,6 +143,7 @@ class MainActivity : ComponentActivity() {
                         }
                     }
                 }
+                }
             }
         }
     }
@@ -151,7 +162,7 @@ private val capabilityIds = listOf(
     "xglobal.uimode", "xglobal.language", "xglobal.foreground",
     "xglobal.network", "xglobal.screen", "xglobal.battery",
     "xglobal.storage", "xglobal.timezone", "xglobal.fontscale",
-    "xglobal.splitscreen", "xglobal.systembars", "xglobal.palette",
+    "xglobal.splitscreen", "xglobal.systembars", "xglobal.palette", "xglobal.scale",
 )
 
 /**
@@ -180,6 +191,8 @@ private fun CapabilityToggles(ctx: IGlobalContext, activity: Activity, onFlash: 
         if (checked["xglobal.systembars"] == true) {
             (activated["xglobal.systembars"] as? SystemBarsCapability)?.attachHost(activity)
         }
+        // Scale 的 View 轨与 Compose 轨二选一:demo 全 UI 走 ResponsiveDensity(Compose 轨),
+        // 不 attachHost,避免双重缩放
     }
 
     fun toggle(
@@ -468,14 +481,134 @@ private fun CapabilityToggles(ctx: IGlobalContext, activity: Activity, onFlash: 
     ) {
         PaletteControls(ctx, activity, onFlash)
     }
+
+    // ---- 响应式尺寸(textScale / dimScale 双轨) ----
+    val scaleOn = checked["xglobal.scale"] == true
+    val textScale = if (scaleOn) ScaleCapability.TextScaleKey.collectAsState(ctx).value else null
+    val dimScale = if (scaleOn) ScaleCapability.DimScaleKey.collectAsState(ctx).value else null
+    ExpandableCapabilityRow(
+        "Scale", scaleOn,
+        if (scaleOn) "Scale: text=${"%.2f".format(textScale ?: 1f)} dim=${"%.2f".format(dimScale ?: 1f)}" else null,
+        onCheckedChange = { on ->
+            toggle("xglobal.scale", on, create = { ScaleCapability(ctx, activity) }) { cap ->
+                // 注销时若 View 轨在用,恢复设备原始 metrics
+                (cap as? ScaleCapability)?.detachHost(activity)
+            }
+        },
+    ) {
+        ScaleControls(ctx, activity, onFlash)
+    }
 }
 
 /** 换肤用:按亮度判断是否深色背景(深底用浅图标,浅底用深图标)。 */
-private fun isDarkColor(color: Int): Boolean {
+internal fun isDarkColor(color: Int): Boolean {
     val r = (color shr 16) and 0xFF
     val g = (color shr 8) and 0xFF
     val b = color and 0xFF
     return (0.299 * r + 0.587 * g + 0.114 * b) < 128
+}
+
+/**
+ * Scale 折叠区控制台:文本/尺寸双滑杆 + 预览卡。
+ * 拖动优化:拖动中仅更新本地状态并驱动预览卡的局部 Density 实时缩放;
+ * 停止 150ms(防抖)后才提交全局,由根节点 ResponsiveDensity 应用到整棵 UI,
+ * 避免拖动中高频覆写全局 metrics 导致的卡顿。
+ * 预览卡覆盖:文字(sp)、内边距/间距/圆点/圆角图片区(dp)——全部随滑杆缩放。
+ */
+@Composable
+private fun ScaleControls(ctx: IGlobalContext, activity: Activity, onFlash: (String) -> Unit) {
+    val scale = ctx.getCapability<ScaleCapability>("xglobal.scale")
+    var textScale by remember { mutableStateOf(scale.textScale) }
+    var dimScale by remember { mutableStateOf(scale.dimScale) }
+    var dragging by remember { mutableStateOf(false) }
+
+    // 防抖提交:停止拖动 150ms 后写入全局状态(Compose 轨即随之重组)
+    LaunchedEffect(textScale, dimScale, dragging) {
+        if (!dragging) {
+            delay(150)
+            if (scale.textScale != textScale) scale.setTextScale(textScale)
+            if (scale.dimScale != dimScale) scale.setDimScale(dimScale)
+        }
+    }
+
+    Text("文本缩放: ${"%.2f".format(textScale)}x", style = MaterialTheme.typography.bodySmall)
+    Slider(
+        value = textScale,
+        valueRange = 0.5f..2f,
+        onValueChange = { dragging = true; textScale = it },
+        onValueChangeFinished = {
+            dragging = false
+            onFlash("文本缩放: ${"%.2f".format(textScale)}x")
+        },
+    )
+    Text("尺寸缩放: ${"%.2f".format(dimScale)}x", style = MaterialTheme.typography.bodySmall)
+    Slider(
+        value = dimScale,
+        valueRange = 0.5f..2f,
+        onValueChange = { dragging = true; dimScale = it },
+        onValueChangeFinished = {
+            dragging = false
+            onFlash("尺寸缩放: ${"%.2f".format(dimScale)}x")
+        },
+    )
+
+    // 预览卡:局部 Density 实时缩放(拖动中即时响应,不等防抖)。
+    // 同 ResponsiveDensity:fontScale 除以 dimScale 补偿,文本与尺寸缩放解耦
+    val base = LocalDensity.current
+    val localDensity = Density(
+        density = (scale.baseDensity.takeIf { it > 0f } ?: base.density) * dimScale,
+        fontScale = base.fontScale * (textScale / dimScale.coerceAtLeast(0.01f)),
+    )
+    CompositionLocalProvider(LocalDensity provides localDensity) {
+        Surface(
+            modifier = Modifier.fillMaxSize(),
+            shape = MaterialTheme.shapes.medium,
+            tonalElevation = 2.dp,
+        ) {
+            Column(
+                // 内边距 16dp 随尺寸缩放
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp), // 间距 8dp 随尺寸缩放
+            ) {
+                Text("预览: 标题", style = MaterialTheme.typography.titleLarge)
+                Text("预览: 正文文本", style = MaterialTheme.typography.bodyMedium)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    repeat(3) { i ->
+                        Box(
+                            modifier = Modifier
+                                .size(24.dp) // 圆点尺寸随缩放
+                                .background(
+                                    listOf(
+                                        MaterialTheme.colorScheme.primary,
+                                        MaterialTheme.colorScheme.secondary,
+                                        MaterialTheme.colorScheme.tertiary,
+                                    )[i],
+                                    CircleShape,
+                                ),
+                        )
+                    }
+                }
+                // 模拟图片元素:圆角区域(宽高/圆角均 dp,随缩放)
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .height(56.dp)
+                        .clip(MaterialTheme.shapes.medium)
+                        .background(MaterialTheme.colorScheme.primaryContainer),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text("图片区 56dp", style = MaterialTheme.typography.bodySmall)
+                }
+                Text(
+                    "48dp 色块",
+                    modifier = Modifier
+                        .size(48.dp)
+                        .background(MaterialTheme.colorScheme.primary, MaterialTheme.shapes.small),
+                    color = MaterialTheme.colorScheme.onPrimary,
+                )
+            }
+        }
+    }
 }
 
 /**
@@ -503,6 +636,10 @@ private fun PaletteControls(ctx: IGlobalContext, activity: Activity, onFlash: (S
         bars.setNavBarBackground(color, 1f)
         bars.setIconDark(!isDarkColor(color)) // 浅色背景 → 深色图标
         appliedSkin = color
+        // 全局换肤开启时,同步广播给所有观察方(其他 Activity 等)
+        if (ctx.store.get(PaletteCapability.GlobalApplyKey)) {
+            ctx.store.set(PaletteCapability.GlobalSkinKey, color)
+        }
         onFlash("换肤: $label #${"%06X".format(color and 0xFFFFFF)}")
     }
 
@@ -544,6 +681,18 @@ private fun PaletteControls(ctx: IGlobalContext, activity: Activity, onFlash: (S
         Button(onClick = { pickImage.launch("image/*") }) { Text("从相册选图") }
     }
     if (busy) Text("提取中…", style = MaterialTheme.typography.bodySmall)
+
+    // 应用到全局 App UI:开启后换肤同步到整页背景并广播给其他 Activity
+    val globalOn = PaletteCapability.GlobalApplyKey.collectAsState(ctx).value
+    CheckboxRow("应用到全局 App UI(所有页面)", globalOn) { on ->
+        palette.setGlobalApply(on)
+        if (on) {
+            appliedSkin?.let { ctx.store.set(PaletteCapability.GlobalSkinKey, it) }
+            onFlash("已开启全局换肤")
+        } else {
+            onFlash("已关闭全局换肤")
+        }
+    }
 
     // ---- 图片展示区:背景/内容色随当前换肤色联动 ----
     lastBitmap?.let { bmp ->

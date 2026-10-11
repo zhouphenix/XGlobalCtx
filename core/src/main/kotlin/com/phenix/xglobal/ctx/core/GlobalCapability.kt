@@ -23,6 +23,12 @@ public interface IGlobalCapability {
     /** 平台配置变化（android 层转发 onConfigurationChanged；core 层仅声明语义）。 */
     public fun onConfigurationChanged() {}
 
+    /**
+     * 宿主页面回到前台（android 层转发 Activity.onResume；core 层仅声明语义，
+     * host 类型由平台适配层定义）。适用于显隐状态等需要随宿主可见性重应用的能力。
+     */
+    public fun onHostResumed(host: Any) {}
+
     /** 卸载或进程退出前的清理回调。 */
     public fun onDetach() {}
 }
