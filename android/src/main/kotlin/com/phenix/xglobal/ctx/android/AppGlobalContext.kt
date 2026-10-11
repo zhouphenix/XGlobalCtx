@@ -3,6 +3,7 @@ package com.phenix.xglobal.ctx.android
 import android.app.Activity
 import android.app.Application
 import android.content.Context
+import android.content.res.Configuration
 import com.phenix.xglobal.ctx.core.IGlobalContext
 import com.phenix.xglobal.ctx.core.GlobalContextImpl
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -52,12 +53,15 @@ public object AppGlobalContext {
     /** 是否已初始化。 */
     public fun isInitialized(): Boolean = impl != null
 
+    // 生命周期回调实例(持有前台 Activity 的弱引用;实例随 Application 存活,无泄漏)
+    private var lifecycleCallbacks: AppLifecycleCallbacks? = null
+
     /**
-     * 当前前台(已 resume)Activity,由生命周期回调维护。
-     * 其 resources 配置总是最新(configChanges 或重建后均如此),
-     * UiMode/Language 等读取方用它兜底,规避 appContext 配置在部分时序下滞后的问题。
+     * 前台 Activity 的最新配置(其 resources 配置总是最新,configChanges 或重建后均如此),
+     * 供 UiMode/Language 等读取方兜底,规避 appContext 配置滞后;无前台 Activity 时为 null。
      */
-    internal var resumedActivity: android.app.Activity? = null
+    internal fun latestActivityConfiguration(): Configuration? =
+        lifecycleCallbacks?.resumedActivityConfiguration()
 
     internal fun requireImpl(): GlobalContextImpl = require() as GlobalContextImpl
 
@@ -83,6 +87,7 @@ public object AppGlobalContext {
      */
     private fun attachBuiltInCapabilities(ctx: GlobalContextImpl, app: Application) {
         val lifecycle = AppLifecycleCallbacks(app, ctx)
+        lifecycleCallbacks = lifecycle
         app.registerActivityLifecycleCallbacks(lifecycle)
         lifecycle.start()
     }

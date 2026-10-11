@@ -47,7 +47,7 @@ public class UiModeCapability(
     private fun readFromConfig(): UiMode {
         // 优先读前台 Activity 的配置(总是最新,configChanges 场景系统就地更新);
         // appContext 配置在部分时序下(setDefaultNightMode/快速来回切换)滞后,导致状态偶尔显示错误
-        val config = AppGlobalContext.resumedActivity?.resources?.configuration
+        val config = AppGlobalContext.latestActivityConfiguration()
             ?: appContext.resources.configuration
         val uiMode = config.uiMode and Configuration.UI_MODE_NIGHT_MASK
         return when (uiMode) {

@@ -24,15 +24,31 @@ internal class AppLifecycleCallbacks(
     private val mainHandler = android.os.Handler(android.os.Looper.getMainLooper())
 
     /**
+     * 当前前台(已 resume)Activity,弱引用持有。
+     * 归属本回调类实例(生命周期与 Application 一致)而非全局单例:
+     * 单例对象不长期挂着 Activity 字段,无静态引用泄漏告警。
+     * 其 resources 配置总是最新(configChanges 或重建后均如此),
+     * UiMode/Language 等读取方用它兜底,规避 appContext 配置滞后。
+     */
+    private var resumedRef: java.lang.ref.WeakReference<Activity>? = null
+
+    /** 前台 Activity 的最新配置;无前台 Activity(或已被回收)时为 null。 */
+    internal fun resumedActivityConfiguration(): Configuration? =
+        resumedRef?.get()?.resources?.configuration
+
+    /**
      * 定时复核链:Application 级配置回调可能先于前台 Activity 的配置就地更新执行
      * (读到的 NIGHT_MASK 为旧值,且 configChanges 场景无后续回调纠正)。
-     * 回调后延时 100/300/1000ms 各复核一次——读前台 Activity 的最新配置覆盖写状态键。
-     * 1s 尾点兜底慢设备;StateKey 写入经 StateFlow 去重,重复写同值不会引起观察方抖动。
+     * 调度时把 Activity 捕获到局部闭包——强引用最多存活 1s 且非静态字段;
+     * 回调后延时 100/300/1000ms 各复核一次,读最新配置覆盖写状态键。
+     * 1s 尾点兜底慢设备;StateKey 写入经 StateFlow 去重,重复写同值不引起观察方抖动。
      */
     private fun scheduleConfigRecheck() {
+        val resumed = resumedRef?.get() ?: return
         listOf(100L, 300L, 1000L).forEach { delayMs ->
             mainHandler.postDelayed({
-                val activity = AppGlobalContext.resumedActivity ?: return@postDelayed
+                val activity = resumedRef?.get() ?: return@postDelayed
+                if (activity !== resumed) return@postDelayed
                 val config = activity.resources.configuration
                 if (ctx.isRegistered("xglobal.uimode")) {
                     when (config.uiMode and Configuration.UI_MODE_NIGHT_MASK) {
@@ -73,8 +89,8 @@ internal class AppLifecycleCallbacks(
     }
 
     override fun onActivityStopped(activity: Activity) {
-        if (AppGlobalContext.resumedActivity === activity) {
-            AppGlobalContext.resumedActivity = null
+        if (resumedRef?.get() === activity) {
+            resumedRef = null
         }
         val prev = activityCount.value
         activityCount.value = (prev - 1).coerceAtLeast(0)
@@ -83,7 +99,7 @@ internal class AppLifecycleCallbacks(
 
     override fun onActivityCreated(activity: Activity, savedInstanceState: Bundle?) = Unit
     override fun onActivityResumed(activity: Activity) {
-        AppGlobalContext.resumedActivity = activity
+        resumedRef = java.lang.ref.WeakReference(activity)
         // 分发宿主恢复事件:显隐意图等需要随宿主可见性重应用的能力自行处理(库内闭环)
         AppGlobalContext.onHostResumed(activity)
         // 统一上报分屏/多窗口状态（进出分屏时 Activity 必然重新 resume）
