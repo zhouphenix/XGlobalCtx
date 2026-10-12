@@ -97,6 +97,33 @@ ctx.bus.observeEvents(this) { event ->
 }
 ```
 
+### 事件总线选型说明（为什么是 SharedFlow，以及粘性语法糖）
+
+内核 `IEventBus` 基于 Kotlin 官方 `MutableSharedFlow`（`replay=0, extraBuffer=64, DROP_OLDEST`）——这是当前 Android 生态的事实标准：协程原生、结构化并发自动取消订阅、无反射无 hack。相比之下：GreenRobot EventBus（反射 + 注解索引，维护已停滞）、RxBus（需手动 dispose，被 RxJava 作者公开反对）、LiveEventBus（反射 hack LiveData 私有实现）均不推荐再引入；**迁移到任何第三方 EventBus 都是退步**。
+
+两种语义的分工（与 StateStore 互补）：
+
+| 需求 | 用法 | 语义 |
+|---|---|---|
+| 纯瞬态通知（在线订阅者才收） | `post` / `tryPost` + `events.collect` | 非粘性，无订阅者即丢弃 |
+| 最新一条需要错过补偿 | `postSticky` + `stickyEvent` / `observeSticky` | 每个事件 key 回放最近一条 |
+
+```kotlin
+// 发布:广播给在线订阅者,同时把最近一条挂到 key 下(订阅方未创建也不丢)
+ctx.bus.postSticky(ThemeChangedEvent(dark), key = "theme_changed")
+
+// 随时取回最近一条(页面 onCreate 先读一次,错过补偿)
+val last = ctx.bus.stickyEvent("theme_changed")
+
+// 或订阅粘性流(replay=1,新订阅者立即得到最近一条,后续增量实时)
+ctx.bus.observeSticky("theme_changed").observe(this) { event -> /* ... */ }
+
+// 粘性值消费完毕可清除
+ctx.bus.removeSticky("theme_changed")
+```
+
+> 选型口诀：**需要错过补偿的用 StateKey 或 postSticky，纯瞬态通知用 post/tryPost**——不给总线加全局粘性，语义清晰且不产生倒灌。
+
 ## 5. Compose 用法（`compose` 模块）
 
 ```kotlin

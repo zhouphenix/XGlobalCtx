@@ -7,12 +7,14 @@ import android.util.TypedValue
 import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
+import androidx.lifecycle.lifecycleScope
 import com.phenix.xglobal.ctx.android.AppGlobalContext
 import com.phenix.xglobal.ctx.android.LanguageKey
 import com.phenix.xglobal.ctx.android.PaletteCapability
 import com.phenix.xglobal.ctx.android.ScaleCapability
 import com.phenix.xglobal.ctx.android.UiModeKey
 import com.phenix.xglobal.ctx.view.observe
+import kotlinx.coroutines.launch
 
 /**
  * View 体系用法示例：StateKey.observe 以生命周期安全方式观察全局状态。
@@ -46,10 +48,28 @@ class ViewDemoActivity : AppCompatActivity() {
         val uiModeText = TextView(this).apply { textSize = 20f }
         val langText = TextView(this).apply { textSize = 20f }
         val scaleText = TextView(this).apply { textSize = 20f }
+        val eventText = TextView(this).apply { textSize = 20f }
         root.addView(uiModeText)
         root.addView(langText)
         root.addView(scaleText)
+        root.addView(eventText)
         setContentView(root)
+
+        // EventBus 演示(View 体系),事件/状态双语义对照:
+        // ① 状态(最近一条)→ 粘性槽位 observeSticky(replay=1):首帧即得当前粘性值
+        //   (无粘性时为 null,显示"暂无";页面未创建期间 postSticky 的也可见,新发布实时刷新)
+        // ② 事件(增量)→ lifecycleScope 直接 collect 总线(含 STOPPED,在线期间不丢;
+        //   页面未创建期间的非粘性广播不回放——这才是"事件"语义)
+        lifecycleScope.launch {
+            ctx.bus.observeSticky("demo.last_event").collect { event ->
+                eventText.text = "EventBus(最近一条): ${event ?: "暂无"}"
+            }
+        }
+        lifecycleScope.launch {
+            ctx.bus.events.collect { event ->
+                eventText.text = "EventBus(增量): ${event.javaClass.simpleName} — $event"
+            }
+        }
 
         // 观察全局状态：内部 repeatOnLifecycle(STARTED)，随生命周期自动取消
         UiModeKey.observe(this) { uiMode ->
@@ -58,12 +78,12 @@ class ViewDemoActivity : AppCompatActivity() {
         LanguageKey.observe(this) { locale ->
             langText.text = "Language: ${locale.displayLanguage}"
         }
-        // 文本缩放实时反馈（跳过初值,避免启动时闪烁）
-        ScaleCapability.TextScaleKey.observe(this) { scale ->
-            scaleText.text = "文本缩放: ${"%.2f".format(scale)}x"
-        }
-        // 已启用 Scale 时展示当前值
+        // 文本缩放:仅当 Scale 已启用才订阅 TextScaleKey(否则其默认值 1.0 会在 STARTED
+        // 后发射,覆盖"未启用"文案)——订阅必须与注册状态一致
         if (ctx.isRegistered("xglobal.scale")) {
+            ScaleCapability.TextScaleKey.observe(this) { scale ->
+                scaleText.text = "文本缩放: ${"%.2f".format(scale)}x"
+            }
             scaleText.text = "文本缩放: ${"%.2f".format(ctx.getCapability<ScaleCapability>("xglobal.scale").textScale)}x"
         } else {
             scaleText.text = "文本缩放: 未启用 Scale 能力"
@@ -75,11 +95,11 @@ class ViewDemoActivity : AppCompatActivity() {
             // 默认态:浅色背景 + 深色文字,与 UiMode 无关恒保对比
             //(dark 模式下主题未适配时解析 textColorPrimary 会得到深色字,配暗底不可读)
             window.setBackgroundDrawable(ColorDrawable(Color.parseColor("#EDEDED")))
-            listOf(uiModeText, langText, scaleText).forEach { it.setTextColor(Color.BLACK) }
+            listOf(uiModeText, langText, scaleText, eventText).forEach { it.setTextColor(Color.BLACK) }
         }
         PaletteCapability.GlobalSkinKey.observe(this) { color ->
             val applied = ctx.store.get(PaletteCapability.GlobalApplyKey) && color != 0
-            val texts = listOf(uiModeText, langText, scaleText)
+            val texts = listOf(uiModeText, langText, scaleText, eventText)
             if (applied) {
                 window.setBackgroundDrawable(ColorDrawable(color))
                 val dark = isDarkColor(color)

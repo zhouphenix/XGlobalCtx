@@ -42,9 +42,11 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -68,6 +70,7 @@ import com.phenix.xglobal.ctx.android.TimeZoneCapability
 import com.phenix.xglobal.ctx.android.UiMode
 import com.phenix.xglobal.ctx.android.UiModeCapability
 import com.phenix.xglobal.ctx.android.UiModeKey
+import com.phenix.xglobal.ctx.compose.CollectEvents
 import com.phenix.xglobal.ctx.compose.collectAsState
 import com.phenix.xglobal.ctx.compose.ResponsiveDensity
 import com.phenix.xglobal.ctx.core.IGlobalCapability
@@ -79,6 +82,7 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 
 /**
@@ -119,6 +123,8 @@ class MainActivity : ComponentActivity() {
                                 style = MaterialTheme.typography.titleMedium,
                             )
                             CapabilityToggles(ctx, this@MainActivity) { flash.value = it }
+                            HorizontalDivider()
+                            EventBusDemoSection(ctx, onFlash = { flash.value = it })
                             HorizontalDivider()
                             Button(onClick = { startActivity(Intent(this@MainActivity, ViewDemoActivity::class.java)) }) {
                                 Text("Open View demo")
@@ -499,6 +505,66 @@ private fun CapabilityToggles(ctx: IGlobalContext, activity: Activity, onFlash: 
         ScaleControls(ctx, activity, onFlash)
     }
 }
+
+/**
+ * EventBus 演示区:非粘性(事件)与粘性(状态)双语义对照。
+ * - 非粘性:post/tryPost 仅广播给在线订阅者,无错过补偿——"事件"语义
+ * - 粘性:postSticky 额外记录最近一条,新观察方打开后 stickyEvent/observeSticky 可取——"状态"语义
+ * 接收列表只展示订阅后的事件(两者都会到达)。
+ */
+@Composable
+private fun EventBusDemoSection(ctx: IGlobalContext, onFlash: (String) -> Unit) {
+    Text("EventBus(非粘性事件 / 粘性状态)", style = MaterialTheme.typography.titleMedium)
+    // 实时接收列表:组合进入后才收到事件(非粘性,不回放)
+    val received = remember { mutableStateListOf<String>() }
+    CollectEvents(ctx) { event ->
+        received.add(0, "${event.javaClass.simpleName}: $event")
+        while (received.size > 6) received.removeAt(received.size - 1)
+    }
+
+    // 双语义发布:非粘性仅广播;粘性 = 广播 + 记录最近一条(key 供错过补偿)
+    fun publishSticky(event: Any, label: String) {
+        ctx.bus.postSticky(event, key = "demo.last_event")
+        onFlash("已发布(粘性) $label")
+    }
+
+    fun publishTransient(event: Any, label: String) {
+        ctx.bus.tryPost(event)
+        onFlash("已发布(非粘性) $label")
+    }
+
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Button(onClick = {
+            publishTransient(
+                "点击事件 ${System.currentTimeMillis() % 100_000}",
+                "String",
+            )
+        }) { Text("发布(非粘性)") }
+        Button(onClick = {
+            publishSticky(
+                "点击事件 ${System.currentTimeMillis() % 100_000}",
+                "String",
+            )
+        }) { Text("发布(粘性)") }
+    }
+    Button(
+        onClick = {
+            ctx.bus.removeSticky("demo.last_event")
+            onFlash("已清除粘性状态(ViewDemo 打开后将显示暂无)")
+        },
+        modifier = Modifier.padding(top = 4.dp),
+    ) { Text("清除粘性状态") }
+    if (received.isEmpty()) {
+        Text("暂无接收(发布后此处实时显示;列表只收订阅后的事件——粘性取回请看 ViewDemo)", style = MaterialTheme.typography.bodySmall)
+    } else {
+        received.forEach { msg ->
+            Text(msg, style = MaterialTheme.typography.bodySmall)
+        }
+    }
+}
+
+/** 演示用自定义事件类型:订阅侧可按类型分发(filterIsInstance / is)。 */
+private data class EventBusDemoEvent(val id: Int)
 
 /** 换肤用:按亮度判断是否深色背景(深底用浅图标,浅底用深图标)。 */
 internal fun isDarkColor(color: Int): Boolean {
